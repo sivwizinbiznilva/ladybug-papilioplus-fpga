@@ -94,8 +94,8 @@ entity T80a is
     HALT_n     : out std_logic;
     BUSAK_n    : out std_logic;
     A          : out std_logic_vector(15 downto 0);
-    D_i        : in  std_logic_vector(7 downto 0);
-    D_o        : out std_logic_vector(7 downto 0)
+		DI						: in  std_logic_vector(7 downto 0);
+		DO						: out std_logic_vector(7 downto 0)
     );
 end T80a;
 
@@ -118,7 +118,7 @@ architecture rtl of T80a is
   signal RFSH_n_i     : std_logic;
   signal BUSAK_n_i    : std_logic;
   signal A_i          : std_logic_vector(15 downto 0);
-  signal DO           : std_logic_vector(7 downto 0);
+	signal DO_Reg			: std_logic_vector(7 downto 0);
   signal DI_Reg       : std_logic_vector (7 downto 0);  -- Input synchroniser
   signal Wait_s       : std_logic;
   signal MCycle       : std_logic_vector(2 downto 0);
@@ -139,7 +139,7 @@ begin
   WR_n <= WR_n_i;
   RFSH_n <= RFSH_n_i;
   A <= A_i;
-  D_o <= DO;
+	DO <= DO_Reg;
 
 --   process (RESET_n, CLK_n)
 --   begin
@@ -174,9 +174,9 @@ begin
       BUSAK_n    => BUSAK_n_i,
       CLK_n      => CLK_n,
       A          => A_i,
-      DInst      => D_i,
+			DInst => DI,
       DI         => DI_Reg,
-      DO         => DO,
+			DO => DO_Reg,
       MC         => MCycle,
       TS         => TState,
       IntCycle_n => IntCycle_n);
@@ -187,7 +187,7 @@ begin
       if CEN = '1' then
         Wait_s <= WAIT_n;
         if TState = "011" and BUSAK_n_i = '1' then
-          DI_Reg <= to_x01(D_i);
+					DI_Reg <= to_x01(DI);
         end if;
       end if;
     end if;

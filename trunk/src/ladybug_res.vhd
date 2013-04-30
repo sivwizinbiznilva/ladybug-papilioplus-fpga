@@ -50,6 +50,9 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
+library ieee;
+use ieee.numeric_std.all;
+
 entity ladybug_res is
 
   port (
@@ -61,40 +64,41 @@ entity ladybug_res is
 
 end ladybug_res;
 
-
-library ieee;
-use ieee.numeric_std.all;
-
-use work.ladybug_comp_pack.ladybug_por;
-
 architecture rtl of ladybug_res is
 
   -- 4.7e-2 s = 1 / 20,000,000 Hz * 940000
   constant res_delay_c : natural := 940000;
 
-
   signal res_sync_n_q : std_logic_vector(1 downto 0);
-
-  signal por_n_s      : std_logic;
 
   signal res_delay_q  : unsigned(19 downto 0);
   signal res_n_q      : std_logic;
 
+  signal por_cnt_q : unsigned(1 downto 0) := "00";
+  signal por_n_q   : std_logic := '0';
 begin
 
-  -----------------------------------------------------------------------------
-  -- Power-on reset
-  --
-  ladybug_por_b : ladybug_por
-    port map (
-      clk_20mhz_i => clk_20mhz_i,
-      por_n_o     => por_n_s
-    );
-  --
-  por_n_o <= por_n_s;
-  --
-  -----------------------------------------------------------------------------
+  por_n_o <= por_n_q;
+  res_n_o <= res_n_q;
 
+  -----------------------------------------------------------------------------
+  -- Process por_cnt
+  --
+  -- Purpose:
+  --   Generate a power-on reset for 4 clock cycles.
+  --
+  por_cnt: process (clk_20mhz_i)
+  begin
+    if clk_20mhz_i'event and clk_20mhz_i = '1' then
+      if por_cnt_q = "11" then
+        por_n_q   <= '1';
+      else
+        por_cnt_q <= por_cnt_q + 1;
+      end if;
+    end if;
+  end process por_cnt;
+  --
+  -----------------------------------------------------------------------------
 
   -----------------------------------------------------------------------------
   -- Process res_sync
@@ -102,9 +106,9 @@ begin
   -- Purpose:
   --   Synchronize asynchronous external reset to main 20 MHz clock.
   --
-  res_sync: process (clk_20mhz_i, ext_res_n_i, por_n_s)
+  res_sync: process (clk_20mhz_i, ext_res_n_i, por_n_q)
   begin
-    if ext_res_n_i = '0' or por_n_s = '0' then
+    if ext_res_n_i = '0' or por_n_q = '0' then
       res_sync_n_q <= (others => '0');
 
     elsif clk_20mhz_i'event and clk_20mhz_i = '1' then
@@ -114,7 +118,6 @@ begin
   end process res_sync;
   --
   -----------------------------------------------------------------------------
-
 
   -----------------------------------------------------------------------------
   -- Process res_delay
@@ -141,7 +144,5 @@ begin
   end process res_delay;
   --
   -----------------------------------------------------------------------------
-
-  res_n_o <= res_n_q;
 
 end rtl;

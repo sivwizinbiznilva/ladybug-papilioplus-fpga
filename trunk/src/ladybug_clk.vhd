@@ -114,29 +114,19 @@ begin
 
       -- generate clock enable for 10 MHz
       -- enable on every second clock of clk_20mhz_i
-      if clk_cnt_5mhz_q = to_unsigned(1, 2) or
-         clk_cnt_5mhz_q = to_unsigned(3, 2) then
-        clk_en_10mhz_o   <= '1';
-      else
-        clk_en_10mhz_o   <= '0';
-      end if;
+      clk_en_10mhz_o   <=     clk_cnt_5mhz_q(0);
       -- enable with 180 deg phase shift
-      if clk_cnt_5mhz_q = to_unsigned(0, 2) or
-         clk_cnt_5mhz_q = to_unsigned(2, 2) then
-        clk_en_10mhz_n_o <= '1';
-      else
-        clk_en_10mhz_n_o <= '0';
-      end if;
+      clk_en_10mhz_n_o <= not clk_cnt_5mhz_q(0);
 
       -- generate clock enables for 5 MHz:
       -- enable on every forth clock of clk_20mhz_i
-      if clk_cnt_5mhz_q = to_unsigned(3, 2) then
+      if clk_cnt_5mhz_q = "11" then
         clk_en_5mhz_o   <= '1';
       else
         clk_en_5mhz_o   <= '0';
       end if;
       -- enable with 180 deg phase shift
-      if clk_cnt_5mhz_q = to_unsigned(1, 2) then
+      if clk_cnt_5mhz_q = "01" then
         clk_en_5mhz_n_o <= '1';
       else
         clk_en_5mhz_n_o <= '0';
@@ -149,14 +139,12 @@ begin
       -- 4 MHz domain
       --
       -- counter for 4 MHz clock enable, wrap around after 5 clocks
-      if clk_cnt_4mhz_q = to_unsigned(4, 3) then
-        clk_cnt_4mhz_q <= (others => '0');
+      clk_en_4mhz_o  <= clk_cnt_4mhz_q(2);
 
-        clk_en_4mhz_o  <= '1';
+      if clk_cnt_4mhz_q = "100" then
+        clk_cnt_4mhz_q <= (others => '0');
       else
         clk_cnt_4mhz_q <= clk_cnt_4mhz_q + 1;
-
-        clk_en_4mhz_o  <= '0';
       end if;
       --
       -------------------------------------------------------------------------

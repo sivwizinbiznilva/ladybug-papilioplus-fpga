@@ -49,11 +49,6 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity ladybug_machine is
-
-  generic (
-    external_ram_g    : integer := 0;   -- 1: use external RAM
-    flip_screen_g     : integer := 0    -- 1: flip screen by default
-  );
   port (
     -- Clock and Reset Interface ----------------------------------------------
     ext_res_n_i       : in  std_logic;
@@ -92,20 +87,11 @@ entity ladybug_machine is
     rom_char_d_i      : in  std_logic_vector(15 downto 0);
     -- Sprite ROM Interface ---------------------------------------------------
     rom_sprite_a_o    : out std_logic_vector(11 downto 0);
-    rom_sprite_d_i    : in  std_logic_vector(15 downto 0);
-    -- External CPU RAM Interface ---------------------------------------------
-    ram_cpu_a_o       : out std_logic_vector(11 downto 0);
-    ram_cpu_d_i       : in  std_logic_vector( 7 downto 0);
-    ram_cpu_d_o       : out std_logic_vector( 7 downto 0);
-    ram_cpu_we_n_o    : out std_logic;
-    ram_cpu_cs_n_o    : out std_logic
+    rom_sprite_d_i    : in  std_logic_vector(15 downto 0)
   );
 
 
 end ladybug_machine;
-
-
-use work.ladybug_comp_pack.all;
 
 architecture struct of ladybug_machine is
 
@@ -148,7 +134,7 @@ begin
   -----------------------------------------------------------------------------
   -- Clock Generator
   -----------------------------------------------------------------------------
-  clk_b : ladybug_clk
+  clk_b : entity work.ladybug_clk
     port map (
       clk_20mhz_i      => clk_20mhz_i,
       por_n_i          => por_n_s,
@@ -159,8 +145,8 @@ begin
       clk_en_4mhz_o    => clk_en_4mhz_s
     );
   --
-  clk_en_5mhz_o  <= clk_en_5mhz_s;
-  clk_en_10mhz_o <= clk_en_10mhz_s;
+  clk_en_5mhz_o   <= clk_en_5mhz_s;
+  clk_en_10mhz_o  <= clk_en_10mhz_s;
   --
   -----------------------------------------------------------------------------
 
@@ -168,7 +154,7 @@ begin
   -----------------------------------------------------------------------------
   -- Reset Generator
   -----------------------------------------------------------------------------
-  res_b : ladybug_res
+  res_b : entity work.ladybug_res
     port map (
       clk_20mhz_i => clk_20mhz_i,
       ext_res_n_i => ext_res_n_i,
@@ -215,21 +201,14 @@ begin
   -----------------------------------------------------------------------------
   -- CPU Unit
   -----------------------------------------------------------------------------
-  cpu_b : ladybug_cpu_unit
-    generic map (
-      external_ram_g => external_ram_g
-    )
+  cpu_b : entity work.ladybug_cpu_unit
     port map (
       clk_20mhz_i    => clk_20mhz_i,
       clk_en_4mhz_i  => clk_en_4mhz_s,
       res_n_i        => res_n_s,
       rom_cpu_a_o    => rom_cpu_a_o,
       rom_cpu_d_i    => rom_cpu_d_i,
-      ram_cpu_a_o    => ram_cpu_a_o,
-      ram_cpu_d_i    => ram_cpu_d_i,
-      ram_cpu_d_o    => ram_cpu_d_o,
-      ram_cpu_cs_n_o => ram_cpu_cs_n_o,
-      ram_cpu_we_n_o => ram_cpu_we_n_o,
+
       sound_wait_n_i => sound_wait_n_s,
       wait_n_i       => wait_n_s,
       right_chute_i  => right_chute_i,
@@ -251,22 +230,15 @@ begin
       cs13_n_o       => cs13_n_s
     );
 
-
   -----------------------------------------------------------------------------
   -- Bus Multiplexer
   -----------------------------------------------------------------------------
-  d_to_cpu_s <=   d_from_video_s
-                when (cs7_n_s and cs13_n_s) = '0' else
-                  (others => '1');
-
+  d_to_cpu_s <= d_from_video_s when (cs7_n_s and cs13_n_s) = '0' else (others => '1');
 
   -----------------------------------------------------------------------------
   -- Video Unit
   -----------------------------------------------------------------------------
-  video_b : ladybug_video_unit
-    generic map (
-      flip_screen_g   => flip_screen_g
-    )
+  video_b : entity work.ladybug_video_unit
     port map (
       clk_20mhz_i      => clk_20mhz_i,
       por_n_i          => por_n_s,
@@ -300,11 +272,10 @@ begin
       rom_sprite_d_i   => rom_sprite_d_i
     );
 
-
   -----------------------------------------------------------------------------
   -- Sound Unit
   -----------------------------------------------------------------------------
-  sound_b : ladybug_sound_unit
+  sound_b : entity work.ladybug_sound_unit
     port map (
       clk_20mhz_i    => clk_20mhz_i,
       clk_en_4mhz_i  => clk_en_4mhz_s,
