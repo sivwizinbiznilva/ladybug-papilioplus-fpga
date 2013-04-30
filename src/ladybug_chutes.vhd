@@ -2,9 +2,9 @@
 --
 -- FPGA Lady Bug
 --
--- $Id: ladybug_sound_unit.vhd,v 1.4 2006/06/16 22:41:37 arnim Exp $
+-- $Id: ladybug_chutes.vhd,v 1.4 2005/10/10 21:21:20 arnim Exp $
 --
--- Sound Unit of the Lady Bug Machine.
+-- Pulse shaping for the two chute inputs.
 --
 -------------------------------------------------------------------------------
 --
@@ -46,98 +46,89 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
 
-entity ladybug_sound_unit is
+entity ladybug_chutes is
 
   port (
-    clk_20mhz_i    : in  std_logic;
-    clk_en_4mhz_i  : in  std_logic;
-    por_n_i        : in  std_logic;
-    cs11_n_i       : in  std_logic;
-    cs12_n_i       : in  std_logic;
-    wr_n_i         : in  std_logic;
-    d_from_cpu_i   : in  std_logic_vector(7 downto 0);
-    sound_wait_n_o : out std_logic;
-    audio_o        : out signed(7 downto 0)
+    clk_20mhz_i   : in  std_logic;
+    res_n_i       : in  std_logic;
+    right_chute_i : in  std_logic;
+    left_chute_i  : in  std_logic;
+    cs8_n_i       : in  std_logic;
+    nmi_n_o       : out std_logic;
+    int_n_o       : out std_logic
   );
 
-end ladybug_sound_unit;
+end ladybug_chutes;
 
-architecture struct of ladybug_sound_unit is
+architecture rtl of ladybug_chutes is
 
-  signal ready_b1_s,
-         ready_c1_s  : std_logic;
-
-  signal aout_b1_s,
-         aout_c1_s   : signed(7 downto 0);
+  signal right_chute_s,
+         left_chute_s   : std_logic;
+  signal left_chute_q   : std_logic;
 
 begin
 
   -----------------------------------------------------------------------------
-  -- SN76489 Sound Chip B1
+  -- Pulse shaper for Right Chute
   -----------------------------------------------------------------------------
-  snd_b1_b : entity work.sn76489_top
-    generic map (
-      clock_div_16_g => 1
-    )
+  right_chute_b : entity work.ladybug_chute
     port map (
-      clock_i    => clk_20mhz_i,
-      clock_en_i => clk_en_4mhz_i,
-      res_n_i    => por_n_i,
-      ce_n_i     => cs11_n_i,
-      we_n_i     => wr_n_i,
-      ready_o    => ready_b1_s,
-      d_i        => d_from_cpu_i,
-      aout_o     => aout_b1_s
+      clk_20mhz_i => clk_20mhz_i,
+      res_n_i     => res_n_i,
+      chute_i     => right_chute_i,
+      chute_o     => right_chute_s
     );
 
 
   -----------------------------------------------------------------------------
-  -- SN76489 Sound Chip C1
+  -- Pulse shaper for Left Chute
   -----------------------------------------------------------------------------
-  snd_c1_b : entity work.sn76489_top
-    generic map (
-      clock_div_16_g => 1
-    )
+  left_chute_b : entity work.ladybug_chute
     port map (
-      clock_i    => clk_20mhz_i,
-      clock_en_i => clk_en_4mhz_i,
-      res_n_i    => por_n_i,
-      ce_n_i     => cs12_n_i,
-      we_n_i     => wr_n_i,
-      ready_o    => ready_c1_s,
-      d_i        => d_from_cpu_i,
-      aout_o     => aout_c1_s
+      clk_20mhz_i => clk_20mhz_i,
+      res_n_i     => res_n_i,
+      chute_i     => left_chute_i,
+      chute_o     => left_chute_s
     );
 
 
   -----------------------------------------------------------------------------
-  -- Process mix
+  -- Process left_edge
   --
   -- Purpose:
-  --   Mix the digital audio of the two SN76489 instances.
-  --   Additional care is taken to avoid audio overfow/clipping.
+  --   Implement the edge detector for the left chute.
+  --   Only a rising edge of the filtered chute input can trigger a new
+  --   interrupt to the CPU.
   --
-  mix: process (aout_b1_s,
-                aout_c1_s)
-    variable sum_v : signed(8 downto 0);
+  left_edge: process (clk_20mhz_i, res_n_i)
   begin
-    sum_v := RESIZE(aout_b1_s, 9) + RESIZE(aout_c1_s, 9);
+    if res_n_i = '0' then
+      left_chute_q <= '0';
+      int_n_o      <= '1';
 
-    if sum_v > 127 then
-      audio_o <= to_signed(127, 8);
-    elsif sum_v < -128 then
-      audio_o <= to_signed(-128, 8);
-    else
-      audio_o <= RESIZE(sum_v, 8);
+    elsif clk_20mhz_i'event and clk_20mhz_i = '1' then
+      left_chute_q <= left_chute_s;
+
+      if cs8_n_i = '0' then
+        -- synchronous set, has priority over data path
+        int_n_o <= '1';
+
+      -- edge detector
+      elsif left_chute_s = '1' and left_chute_q = '0' then
+        int_n_o <= '0';
+
+      end if;
+
     end if;
-
-  end process mix;
-  -- 
+  end process left_edge;
+  --
   -----------------------------------------------------------------------------
 
 
-  sound_wait_n_o <= ready_b1_s and ready_c1_s;
+  -----------------------------------------------------------------------------
+  -- Output Mapping
+  -----------------------------------------------------------------------------
+  nmi_n_o <= not right_chute_s;
 
-end struct;
+end rtl;

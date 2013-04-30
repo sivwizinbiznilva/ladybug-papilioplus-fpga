@@ -2,9 +2,9 @@
 --
 -- FPGA Lady Bug
 --
--- $Id: ladybug_sound_unit.vhd,v 1.4 2006/06/16 22:41:37 arnim Exp $
+-- $Id: ladybug_rgb.vhd,v 1.4 2005/10/10 22:02:14 arnim Exp $
 --
--- Sound Unit of the Lady Bug Machine.
+-- RGB Generation Module of the Lady Bug Machine.
 --
 -------------------------------------------------------------------------------
 --
@@ -46,98 +46,90 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
 
-entity ladybug_sound_unit is
+entity ladybug_rgb is
 
   port (
-    clk_20mhz_i    : in  std_logic;
-    clk_en_4mhz_i  : in  std_logic;
-    por_n_i        : in  std_logic;
-    cs11_n_i       : in  std_logic;
-    cs12_n_i       : in  std_logic;
-    wr_n_i         : in  std_logic;
-    d_from_cpu_i   : in  std_logic_vector(7 downto 0);
-    sound_wait_n_o : out std_logic;
-    audio_o        : out signed(7 downto 0)
+    clk_20mhz_i   : in  std_logic;
+    por_n_i       : in  std_logic;
+    clk_en_5mhz_i : in  std_logic;
+    crg_i         : in  std_logic_vector(5 downto 1);
+    sig_i         : in  std_logic_vector(4 downto 1);
+    rgb_r_o       : out std_logic_vector(1 downto 0);
+    rgb_g_o       : out std_logic_vector(1 downto 0);
+    rgb_b_o       : out std_logic_vector(1 downto 0)
   );
 
-end ladybug_sound_unit;
+end ladybug_rgb;
 
-architecture struct of ladybug_sound_unit is
+architecture rtl of ladybug_rgb is
 
-  signal ready_b1_s,
-         ready_c1_s  : std_logic;
-
-  signal aout_b1_s,
-         aout_c1_s   : signed(7 downto 0);
+  signal a_s     : std_logic_vector(5 downto 1);
+  signal rgb_s   : std_logic_vector(8 downto 1);
+  signal rgb_n_q : std_logic_vector(8 downto 1);
 
 begin
 
   -----------------------------------------------------------------------------
-  -- SN76489 Sound Chip B1
-  -----------------------------------------------------------------------------
-  snd_b1_b : entity work.sn76489_top
-    generic map (
-      clock_div_16_g => 1
-    )
-    port map (
-      clock_i    => clk_20mhz_i,
-      clock_en_i => clk_en_4mhz_i,
-      res_n_i    => por_n_i,
-      ce_n_i     => cs11_n_i,
-      we_n_i     => wr_n_i,
-      ready_o    => ready_b1_s,
-      d_i        => d_from_cpu_i,
-      aout_o     => aout_b1_s
-    );
-
-
-  -----------------------------------------------------------------------------
-  -- SN76489 Sound Chip C1
-  -----------------------------------------------------------------------------
-  snd_c1_b : entity work.sn76489_top
-    generic map (
-      clock_div_16_g => 1
-    )
-    port map (
-      clock_i    => clk_20mhz_i,
-      clock_en_i => clk_en_4mhz_i,
-      res_n_i    => por_n_i,
-      ce_n_i     => cs12_n_i,
-      we_n_i     => wr_n_i,
-      ready_o    => ready_c1_s,
-      d_i        => d_from_cpu_i,
-      aout_o     => aout_c1_s
-    );
-
-
-  -----------------------------------------------------------------------------
-  -- Process mix
+  -- Process addr
   --
   -- Purpose:
-  --   Mix the digital audio of the two SN76489 instances.
-  --   Additional care is taken to avoid audio overfow/clipping.
+  --   Generates the PROM address.
   --
-  mix: process (aout_b1_s,
-                aout_c1_s)
-    variable sum_v : signed(8 downto 0);
+  addr: process (crg_i,
+                 sig_i)
+    variable sig_and_v : std_logic;
   begin
-    sum_v := RESIZE(aout_b1_s, 9) + RESIZE(aout_c1_s, 9);
+    sig_and_v := sig_i(1) and sig_i(2) and sig_i(3) and sig_i(4);
 
-    if sum_v > 127 then
-      audio_o <= to_signed(127, 8);
-    elsif sum_v < -128 then
-      audio_o <= to_signed(-128, 8);
+    a_s(5) <= crg_i(1) and sig_and_v;
+
+    if not (sig_and_v and (crg_i(1) or crg_i(2))) = '0' then
+      a_s(4 downto 1) <= crg_i(2) & crg_i(5) & crg_i(4) & crg_i(3);
     else
-      audio_o <= RESIZE(sum_v, 8);
+      a_s(4 downto 1) <= sig_i;
     end if;
 
-  end process mix;
-  -- 
+  end process addr;
+  --
   -----------------------------------------------------------------------------
 
 
-  sound_wait_n_o <= ready_b1_s and ready_c1_s;
+  -----------------------------------------------------------------------------
+  -- The RGB Conversion PROM
+  -----------------------------------------------------------------------------
+  rgb_prom_b : entity work.prom_10_2
+    port map (
+      CLK    => clk_20mhz_i,
+      ADDR   => a_s,
+      DATA   => rgb_s
+    );
 
-end struct;
+  -----------------------------------------------------------------------------
+  -- Process rgb_latch
+  --
+  -- Purpose:
+  --   Implements the output latch for the RGB values.
+  --
+  rgb_latch: process (clk_20mhz_i, por_n_i)
+  begin
+    if por_n_i = '0' then
+      rgb_n_q <= (others => '1');
+    elsif clk_20mhz_i'event and clk_20mhz_i = '1' then
+      if clk_en_5mhz_i = '1' then
+        rgb_n_q <= not rgb_s;
+      end if;
+    end if;
+  end process rgb_latch;
+  --
+  -----------------------------------------------------------------------------
+
+
+  -----------------------------------------------------------------------------
+  -- Output Mapping
+  -----------------------------------------------------------------------------
+  rgb_r_o <= rgb_n_q(5+1) & rgb_n_q(0+1);
+  rgb_g_o <= rgb_n_q(6+1) & rgb_n_q(2+1);
+  rgb_b_o <= rgb_n_q(7+1) & rgb_n_q(4+1);
+
+end rtl;
